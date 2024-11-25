@@ -5,7 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-app_id_mapping = [
+APP_ID_MAPPING = [
     # User Define
     ["footclient", "󰽒", "Foot Terminal"],
     ["popup_term", "", "Pop-up Terminal"],
@@ -101,8 +101,8 @@ app_id_mapping = [
     # Desktop
     ["^$", "󰇄", "Desktop"],
 ]
-app_id_mapping_fallback = "󰣆"
-dmenu_delimiter = " "  # Delimiter between icon and name in dmenu
+APP_ID_MAPPING_FALLBACK = "󰣆"
+DMENU_DELIMITER = " "  # Delimiter between icon and name in dmenu
 
 
 @dataclass
@@ -124,7 +124,7 @@ class Windows:
 
         # Convert to dict for fast lookup
         mapping_dict = {
-            item[0]: f"{item[1]}{dmenu_delimiter}{item[2]}" for item in app_id_mapping
+            item[0]: f"{item[1]}{DMENU_DELIMITER}{item[2]}" for item in APP_ID_MAPPING
         }
 
         for window in self.windows:
@@ -134,7 +134,7 @@ class Windows:
             else:
                 # Use fallback icon
                 window.app_id = (
-                    f"{app_id_mapping_fallback}{dmenu_delimiter}{window.app_id}"
+                    f"{APP_ID_MAPPING_FALLBACK}{DMENU_DELIMITER}{window.app_id}"
                 )
 
     def construct_dmenu_list(self, is_map=True) -> str:
@@ -152,8 +152,12 @@ class Windows:
 
 
 def raise_error_fuzzel(err):
-    print(err, file=sys.stderr)
-    subprocess.run(["fuzzel", "--dmenu", "--log-level=none"], input=err, text=True)
+    try:
+        subprocess.run(["fuzzel", "--dmenu", "--log-level=none"], input=err, text=True)
+        print(err, file=sys.stderr)
+    except FileNotFoundError:
+        print("Error: fuzzel is not installed.", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_windows(window_type):
@@ -182,7 +186,7 @@ def get_windows(window_type):
             '(.id | tostring) + "|||" + .app_id + "|||" + .name'
         )
     else:
-        print(f'Invalid type "{window_type}"\n', file=sys.stderr)
+        raise_error_fuzzel(f'Invalid type "{window_type}"')
         sys.exit(1)
 
     command = (
