@@ -246,7 +246,14 @@ def main():
     # Select window with fuzzel
     try:
         selected = subprocess.run(
-            ["fuzzel", "--dmenu", "--index", "--log-level=none"],
+            [
+                "fuzzel",
+                "--dmenu",
+                "--index",
+                "--log-level=none",
+                "--placeholder",
+                f"{str.capitalize(WINDOW_TYPE)} Windows",
+            ],
             input=windows_dmenu_str,
             text=True,
             capture_output=True,
