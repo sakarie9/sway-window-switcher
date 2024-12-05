@@ -3,6 +3,7 @@
 import argparse
 import subprocess
 import sys
+import shutil
 from dataclasses import dataclass
 
 APP_ID_MAPPING = [
@@ -11,7 +12,13 @@ APP_ID_MAPPING = [
     ["popup_term", "", "Pop-up Terminal"],
     ["zen-browser", "󰈹", "Zen Browser"],
     ["musicfox", "", "Musicfox"],
-    # Original Entries
+]
+APP_ID_MAPPING_FALLBACK = "󰣆"
+DMENU_DELIMITER = " "  # Delimiter between icon and name in dmenu
+
+### DO NOT EDIT BELOW THIS LINE  ###
+
+APP_ID_MAPPING += [  # Original Entries
     ["kitty", "󰄛", "Kitty Terminal"],
     ["firefox", "󰈹", "Firefox"],
     ["microsoft-edge", "󰇩", "Edge"],
@@ -101,8 +108,6 @@ APP_ID_MAPPING = [
     # Desktop
     ["^$", "󰇄", "Desktop"],
 ]
-APP_ID_MAPPING_FALLBACK = "󰣆"
-DMENU_DELIMITER = " "  # Delimiter between icon and name in dmenu
 
 
 @dataclass
@@ -151,16 +156,7 @@ class Windows:
         return self.windows[int(index)].id
 
 
-def raise_error_fuzzel(err):
-    try:
-        subprocess.run(["fuzzel", "--dmenu", "--log-level=none"], input=err, text=True)
-        print(err, file=sys.stderr)
-    except FileNotFoundError:
-        print("Error: fuzzel is not installed.", file=sys.stderr)
-        sys.exit(1)
-
-
-def get_windows(window_type):
+def get_windows(LAUNCHER, window_type):
     """Get the list of windows based on the specified type."""
     swaymsg_command = "swaymsg -t get_tree"
     if window_type == "all":
@@ -186,7 +182,7 @@ def get_windows(window_type):
             '(.id | tostring) + "|||" + .app_id + "|||" + .name'
         )
     else:
-        raise_error_fuzzel(f'Invalid type "{window_type}"')
+        raise_error_dmenu(LAUNCHER, f'Invalid type "{window_type}"')
         sys.exit(1)
 
     command = (
@@ -196,9 +192,11 @@ def get_windows(window_type):
 
     if result.returncode != 0:
         if result.stderr == "":
-            raise_error_fuzzel("Warning: No Results")
+            raise_error_dmenu(LAUNCHER, "Warning: No Results")
         else:
-            raise_error_fuzzel(f"Error: executing command failed: {result.stderr}")
+            raise_error_dmenu(
+                LAUNCHER, f"Error: executing command failed: {result.stderr}"
+            )
         sys.exit(1)
 
     return parse_window_output(result.stdout)
@@ -214,36 +212,7 @@ def parse_window_output(output):
     return windows
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="List and select windows using swaymsg and fuzzel."
-    )
-    parser.add_argument(
-        "-t",
-        "--type",
-        type=str,
-        default="all",
-        help='Type of window to list: "all", "floating", "scratch", or "regular". Defaults to "all".',
-    )
-    parser.add_argument(
-        "--plain-output",
-        action="store_true",
-        help="Print a plain, unbeautified list to dmenu.",
-    )
-    args = parser.parse_args()
-
-    WINDOW_TYPE = args.type
-    PLAIN_OUTPUT = args.plain_output
-
-    windows = get_windows(WINDOW_TYPE)
-
-    if not windows:
-        raise_error_fuzzel("Error: No windows found")
-        sys.exit(1)
-
-    windows_dmenu_str = windows.construct_dmenu_list(is_map=not PLAIN_OUTPUT)
-
-    # Select window with fuzzel
+def dmenu_fuzzel(dmenu_str, promot):
     try:
         selected = subprocess.run(
             [
@@ -252,19 +221,116 @@ def main():
                 "--index",
                 "--log-level=none",
                 "--placeholder",
-                f"{str.capitalize(WINDOW_TYPE)} Windows",
+                f"{promot}",
             ],
-            input=windows_dmenu_str,
+            input=dmenu_str,
             text=True,
             capture_output=True,
         ).stdout.strip()
+
     except FileNotFoundError:
         print("Error: fuzzel is not installed.", file=sys.stderr)
         sys.exit(1)
+    return selected
+
+
+def dmenu_rofi(dmenu_str, promot):
+    try:
+        selected = subprocess.run(
+            [
+                "rofi",
+                "-dmenu",
+                "-format",
+                "i",
+                "-p",
+                f"{promot}",
+            ],
+            input=dmenu_str,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+
+    except FileNotFoundError:
+        print("Error: rofi is not installed.", file=sys.stderr)
+        sys.exit(1)
+    return selected
+
+
+def dmenu_run(launcher, dmenu_str, promot):
+    selected_index = None
+    match launcher:
+        case "fuzzel":
+            selected_index = dmenu_fuzzel(dmenu_str, promot)
+        case "rofi":
+            selected_index = dmenu_rofi(dmenu_str, promot)
+    return selected_index
+
+
+def raise_error_dmenu(launcher, err):
+    dmenu_run(launcher, err, "")
+    print(err, file=sys.stderr)
+
+
+WINDOW_TPYES = ["all", "floating", "scratch", "regular"]
+SUPPORTED_LAUNCHERS = ["fuzzel", "rofi"]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="List and select windows using swaymsg and dmenu launchers like fuzzel and rofi."
+    )
+    parser.add_argument(
+        "-t",
+        "--type",
+        type=str,
+        default="all",
+        choices=WINDOW_TPYES,
+        help='Type of window to list. Defaults to "all".',
+    )
+    parser.add_argument(
+        "--plain-output",
+        action="store_true",
+        help="Print a plain, unbeautified list to dmenu.",
+    )
+    parser.add_argument(
+        "-l",
+        "--launcher",
+        type=str,
+        choices=SUPPORTED_LAUNCHERS,
+        help="Specific a dmenu launcher to use. Will use first exist launcher if not define.",
+    )
+    args = parser.parse_args()
+
+    WINDOW_TYPE = args.type
+    PLAIN_OUTPUT = args.plain_output
+    LAUNCHER = args.launcher
+
+    # If launcher not defined in cli, use first found launcher in SUPPORTED_LAUNCHERS
+    if not LAUNCHER:
+        for launcher in SUPPORTED_LAUNCHERS:
+            if shutil.which(launcher):
+                LAUNCHER = launcher
+                break
+    if not LAUNCHER:
+        print("Error: No supported launcher is installed.", file=sys.stderr)
+        sys.exit(1)
+
+    windows = get_windows(LAUNCHER, WINDOW_TYPE)
+
+    if not windows:
+        raise_error_dmenu(LAUNCHER, "Error: No windows found")
+        sys.exit(1)
+
+    # Build dmenu list
+    windows_dmenu_str = windows.construct_dmenu_list(is_map=not PLAIN_OUTPUT)
+    dmenu_promot = f"{str.capitalize(WINDOW_TYPE)} Windows"
+
+    # Run dmenu
+    selected_index = dmenu_run(LAUNCHER, windows_dmenu_str, dmenu_promot)
 
     # Tell sway to focus said window
-    if selected:
-        window_id = windows.get_id_by_index(selected)
+    if selected_index:
+        window_id = windows.get_id_by_index(selected_index)
         subprocess.run(["swaymsg", f"[con_id={window_id}] focus"])
 
 

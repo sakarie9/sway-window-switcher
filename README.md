@@ -1,18 +1,18 @@
 # Sway Window Switcher
 
-A Python script to help list and switch sway windows easily through Fuzzel.
+A Python script to help list and switch sway windows easily through dmenu launchers like fuzzel and rofi.
 
 ![Screenshot-1](./assets/screenshot-1.webp)
 
 ## Requirements
 
 - Sway
-- Fuzzel
+- A dmenu launcher, including fuzzel and rofi
 - Python3
 - jq
 - Grep
 
-Also a nerd font is required if icons not show correctly. You can change fonts in fuzzel settings.
+Also a nerd font is required if icons not show correctly. You can change fonts in your launcher settings.
 
 ## Usage
 
@@ -22,14 +22,17 @@ Also a nerd font is required if icons not show correctly. You can change fonts i
 
    ```bash
    > sway-window-switcher.py -h
-   usage: sway-window-switcher.py [-h] [-t TYPE] [--plain-output]
+    usage: sway-window-switcher.py [-h] [-t {all,floating,scratch,regular}] [--plain-output] [-l {fuzzel,rofi}]
 
-   List and select windows using swaymsg and fuzzel.
+    List and select windows using swaymsg and dmenu launchers like fuzzel and rofi.
 
-   options:
-     -h, --help show this help message and exit
-     -t TYPE, --type TYPE Type of window to list: "all", "floating", "scratch", or "regular". Defaults to "all".
-     --plain-output Print a plain, unbeautified list to dmenu.
+    options:
+      -h, --help            show this help message and exit
+      -t {all,floating,scratch,regular}, --type {all,floating,scratch,regular}
+                            Type of window to list. Defaults to "all".
+      --plain-output        Print a plain, unbeautified list to dmenu.
+      -l {fuzzel,rofi}, --launcher {fuzzel,rofi}
+                        Specific a dmenu launcher to use. Will use first exist launcher if not define.
    ```
 
 3. Bind the script to sway keybind to use it easily.
